@@ -1,0 +1,42 @@
+.layout {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  
+  .header {
+    background-color: var(--dark-color);
+    color: var(--text-light);
+    padding: 1rem;
+  }
+  
+  .nav-list {
+    display: flex;
+    list-style: none;
+    gap: 1rem;
+  }
+  
+  .nav-list a {
+    color: var(--text-light);
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+  }
+  
+  .nav-list a:hover {
+    background-color: var(--primary-color);
+  }
+  
+  .main-content {
+    flex: 1;
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  
+  .footer {
+    background-color: var(--dark-color);
+    color: var(--text-light);
+    text-align: center;
+    padding: 1rem;
+  }
