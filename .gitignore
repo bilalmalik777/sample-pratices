@@ -241,3 +241,12 @@ ModelManifest.xml
 
 # WEBSTORM IDE WORKSPACE files
 .idea/*.xml
+
+# Allow React frontend
+!book-management-app/
+!book-management-app/**
+
+# But still ignore React build artifacts
+book-management-app/node_modules/
+book-management-app/build/
+
