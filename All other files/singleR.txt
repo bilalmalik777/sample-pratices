@@ -1,0 +1,160 @@
+// <copyright file="EnergyDashboardHub.cs" company="ThingTrax UK Ltd">
+// Copyright (c) ThingTrax Ltd. All rights reserved.
+// </copyright>
+
+namespace TT.Core.Services.Hubs
+{
+    using System;
+    using System.Collections.Concurrent;
+    using System.Collections.Generic;
+    using System.Threading;
+    using System.Threading.Tasks;
+    using Microsoft.AspNetCore.SignalR;
+    using Microsoft.Extensions.DependencyInjection;
+    using TT.Core.Services.Interfaces;
+
+    /// <summary>
+    /// energy dashboard.
+    /// </summary>
+    /// <seealso cref="Hub" />
+    public class EnergyDashboardHub : Hub
+    {
+        /// <summary>
+        /// The padlock.
+        /// </summary>
+        private static readonly object Padlock = new object();
+
+        /// <summary>
+        /// The factoryList.
+        /// </summary>
+        private static ConcurrentDictionary<long, IList<string>> factoryList = new ConcurrentDictionary<long, IList<string>>();
+
+        /// <summary>
+        /// The PRL job.
+        /// </summary>
+        private static Thread energyDashBoardData = null;
+
+        /// <summary>
+        /// The scope factory.
+        /// </summary>
+        private readonly IServiceScopeFactory scopeFactory;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="EnergyDashboardHub" /> class.
+        /// </summary>
+        /// <param name="serviceScopeFactory">The service scope factory.</param>
+        /// <exception cref="ArgumentNullException">memoryCache.</exception>
+        public EnergyDashboardHub(
+               IServiceScopeFactory serviceScopeFactory)
+        {
+            this.scopeFactory = serviceScopeFactory;
+        }
+
+        /// <summary>
+        /// Called when the connection connects to this hub instance.
+        /// </summary>
+        /// <returns>
+        /// A <see cref="T:System.Threading.Tasks.Task" />.
+        /// </returns>
+        public async override Task OnConnectedAsync()
+        {
+            var query = this.Context.GetHttpContext().Request.Query;
+            if (query.ContainsKey("factoryId"))
+            {
+                int factoryId = Convert.ToInt32(query["factoryId"].ToString());
+
+                await this.Groups.AddToGroupAsync(this.Context.ConnectionId, factoryId.ToString());
+
+                if (factoryList.ContainsKey(factoryId))
+                {
+                    factoryList[factoryId].Add(this.Context.ConnectionId);
+                }
+                else
+                {
+                    factoryList.TryAdd(factoryId, new List<string> { this.Context.ConnectionId });
+
+                    if (factoryList.Count == 1)
+                    {
+                        this.EnergyDashboardData();
+                    }
+                }
+            }
+
+            await base.OnConnectedAsync();
+        }
+
+        /// <summary>
+        /// Called when the connection connects to this hub instance.
+        /// </summary>
+        /// <param name="exception">exception.</param>
+        /// <returns>
+        /// A <see cref="T:System.Threading.Tasks.Task" />.
+        /// </returns>
+        public async override Task OnDisconnectedAsync(Exception exception)
+        {
+            var query = this.Context.GetHttpContext().Request.Query;
+
+            if (query.ContainsKey("factoryId"))
+            {
+                int factoryId = Convert.ToInt32(query["factoryId"].ToString());
+
+                await this.Groups.RemoveFromGroupAsync(this.Context.ConnectionId, factoryId.ToString());
+
+                if (factoryList.ContainsKey(factoryId))
+                {
+                    factoryList[factoryId].Remove(this.Context.ConnectionId);
+
+                    if (factoryList[factoryId].Count < 1)
+                    {
+                        factoryList.TryRemove(factoryId, out _);
+                    }
+                }
+            }
+
+            await base.OnDisconnectedAsync(exception);
+        }
+
+        /// <summary>
+        /// Sends the message.
+        /// </summary>
+        public void EnergyDashboardData()
+        {
+            if (energyDashBoardData == null)
+            {
+                lock (Padlock)
+                {
+                    if (energyDashBoardData == null)
+                    {
+                        energyDashBoardData = new Thread(() => this.BroadCastEnergyDashboardData());
+                        energyDashBoardData.Start();
+                    }
+                }
+            }
+        }
+
+        private void BroadCastEnergyDashboardData()
+        {
+            while (factoryList.Count > 0)
+            {
+                Console.WriteLine("Sending  energy dashboard data process started");
+
+                using (IServiceScope serviceScope = this.scopeFactory.CreateScope())
+                {
+                    var dashboardService = serviceScope.ServiceProvider.GetService<IDashboardsService>();
+
+                    dashboardService.SendEnergyDashboardData(factoryList).Wait();
+                }
+
+                Console.WriteLine("energy dashboard data sent");
+
+                if (factoryList.Count > 0)
+                {
+                    Thread.Sleep(60000);
+                }
+            }
+
+            energyDashBoardData = null;
+            this.Dispose();
+        }
+    }
+}
